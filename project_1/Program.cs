@@ -57,56 +57,21 @@ builder.Services.AddScoped<IMemberService, MemberService>();
 var app = builder.Build();
 
 // ---------------------------------------------
-// OPTIONAL (enable once on Azure to create tables, then remove):
-// ---------------------------------------------
-// using (var scope = app.Services.CreateScope())
-// {
-//     var db = scope.ServiceProvider.GetRequiredService<project_1Context>();
-//     db.Database.Migrate(); // applies pending migrations on the configured DB
-// }
-
-// ---------------------------------------------
 // Pipeline
 // ---------------------------------------------
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// Custom middlewares (order matters: logging first, exception handler early)
+// ?? Custom middlewares (order matters: logging first, exception handler early)
 app.UseRequestLogging();
 app.UseGlobalExceptionHandler();
 
 app.UseHttpsRedirection();
+app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
-// ---------------------------------------------
-// Health endpoints
-// ---------------------------------------------
-
-// Simple liveness (app started)
-app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
-
-// DB health (use this for Azure Health Check)
-app.MapGet("/orm/health", async ([FromServices] project_1Context db) =>
-{
-    try
-    {
-        var canConnect = await db.Database.CanConnectAsync();
-        if (!canConnect)
-            return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
-
-        return Results.Ok(new { status = "ok", db = "connected" });
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem(
-            title: "DB connectivity failed",
-            detail: ex.Message,
-            statusCode: StatusCodes.Status503ServiceUnavailable);
-    }
-});
 
 app.Run();
