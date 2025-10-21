@@ -1,19 +1,22 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc;
 using project_1.Data;
 using project_1.Services;
-using System.Text.Json;
+using project_1.Middlewares;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Connection string (User Secrets / appsettings.*)
+// ---------------------------------------------
+// Database / Identity
+// ---------------------------------------------
 var connectionString = builder.Configuration.GetConnectionString("project_1ContextConnection")
     ?? throw new InvalidOperationException("Connection string 'project_1ContextConnection' not found.");
 
 builder.Services.AddDbContext<project_1Context>(opt =>
     opt.UseSqlServer(connectionString, sql =>
     {
-        // Resiliency for transient Azure SQL hiccups
+        // Resiliency for transient Azure SQL hiccups (good for Azure)
         sql.EnableRetryOnFailure(
             maxRetryCount: 5,
             maxRetryDelay: TimeSpan.FromSeconds(10),
@@ -26,16 +29,25 @@ builder.Services.AddDbContext<project_1Context>(opt =>
 builder.Services.AddDefaultIdentity<IdentityUser>(o => o.SignIn.RequireConfirmedAccount = false)
     .AddEntityFrameworkStores<project_1Context>();
 
-// Controllers + Swagger
+// ---------------------------------------------
+// Controllers and Swagger
+// ---------------------------------------------
 builder.Services.AddControllers()
-    // (optional) if you ever serialize entities directly, prevent cycles
-    .AddJsonOptions(o => o.JsonSerializerOptions.ReferenceHandler =
-        System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles);
+    // Prevent cycles in case entities ever get serialized directly
+    .AddJsonOptions(o =>
+        o.JsonSerializerOptions.ReferenceHandler =
+            System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles);
 
+// Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Your services
+// Optional: standardized RFC-7807 responses for errors
+builder.Services.AddProblemDetails();
+
+// ---------------------------------------------
+// Dependency Injection for your app services
+// ---------------------------------------------
 builder.Services.AddScoped<IBookService, BookService>();
 builder.Services.AddScoped<IAuthorService, AuthorService>();
 builder.Services.AddScoped<IPublisherService, PublisherService>();
@@ -44,11 +56,18 @@ builder.Services.AddScoped<IMemberService, MemberService>();
 
 var app = builder.Build();
 
-// Swagger
+// ---------------------------------------------
+// Pipeline
+// ---------------------------------------------
 app.UseSwagger();
 app.UseSwaggerUI();
 
+// ?? Custom middlewares (order matters: logging first, exception handler early)
+app.UseRequestLogging();
+app.UseGlobalExceptionHandler();
+
 app.UseHttpsRedirection();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
