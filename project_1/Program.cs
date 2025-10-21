@@ -67,6 +67,7 @@ app.UseRequestLogging();
 app.UseGlobalExceptionHandler();
 
 app.UseHttpsRedirection();
+app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
 
 app.UseAuthentication();
 app.UseAuthorization();
