@@ -62,10 +62,26 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Liveness (app up) — your DB check is in HealthDbController at /healthz/db
+// Liveness (app up)
 app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
 
-// Map MVC controllers (includes HealthDbController -> /healthz/db)
+// DB health (guaranteed even if controller discovery fails)
+app.MapGet("/healthz/db", async (project_1Context db) =>
+{
+    try
+    {
+        var can = await db.Database.CanConnectAsync();
+        return can
+            ? Results.Ok(new { status = "ok", db = "connected" })
+            : Results.Json(new { status = "degraded", db = "unreachable" }, statusCode: 503);
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { status = "error", db = ex.Message }, statusCode: 500);
+    }
+});
+
+// Map MVC controllers (includes your HealthDbController too)
 app.MapControllers();
 
 app.Run();
